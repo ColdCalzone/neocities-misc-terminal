@@ -1,11 +1,16 @@
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen]
-extern "C" {
-    pub fn alert(s: &str);
-}
+mod terminal;
+mod utils;
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
-pub fn greet() {
-    alert("It's working!");
-}
+extern "C" {}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn greet() {}
+
+#[cfg(test)]
+mod tests;
