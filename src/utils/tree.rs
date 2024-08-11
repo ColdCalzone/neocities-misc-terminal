@@ -1,97 +1,109 @@
 use std::{
-    collections::HashMap,
-    hash::Hash,
-    ops::{Index, IndexMut},
+    cell::{Ref, RefCell, RefMut},
+    rc::{Rc, Weak},
 };
 
 #[derive(Debug)]
-pub enum Node<K, V>
-where
-    K: Eq + Hash,
-{
-    Branch(Box<Tree<K, V>>),
-    Leaf(V),
+pub struct Node<T> {
+    me: Weak<RefCell<Node<T>>>,
+    children: Option<Vec<Rc<RefCell<Node<T>>>>>,
+    parent: Option<Weak<RefCell<Node<T>>>>,
+    value: Option<T>,
+}
+
+impl<T> Node<T> {
+    pub fn new() -> Rc<RefCell<Self>> {
+        Rc::new_cyclic(|me| {
+            RefCell::new(Node {
+                children: None,
+                parent: None,
+                value: None,
+                me: me.clone(),
+            })
+        })
+    }
+
+    pub fn new_with_value(value: T) -> Rc<RefCell<Self>> {
+        Rc::new_cyclic(|me| {
+            RefCell::new(Node {
+                children: None,
+                parent: None,
+                value: Some(value),
+                me: me.clone(),
+            })
+        })
+    }
+
+    pub fn set_value(&mut self, value: T) {
+        self.value = Some(value);
+    }
+
+    pub fn get_value(&self) -> Option<&T> {
+        self.value.as_ref()
+    }
+
+    pub fn get_value_mut(&mut self) -> Option<&mut T> {
+        self.value.as_mut()
+    }
+
+    fn set_parent(&mut self, parent: Weak<RefCell<Node<T>>>) {
+        self.parent = Some(parent);
+    }
+
+    pub fn get_parent(&self) -> Option<Weak<RefCell<Node<T>>>> {
+        self.parent.as_ref().map(|x| x.clone())
+    }
+
+    pub fn insert_child_value(&mut self, value: T) {
+        let child = Self::new_with_value(value);
+        self.graft(child);
+    }
+
+    pub fn graft(&mut self, other: Rc<RefCell<Node<T>>>) {
+        if self.children.is_none() {
+            self.children = Some(Vec::new());
+        }
+        if let Some(children) = &mut self.children {
+            (*other).borrow_mut().set_parent(self.me.clone());
+            children.push(other);
+        }
+    }
 }
 
 #[derive(Debug)]
-pub struct Tree<K, V>
-where
-    K: Eq + Hash,
-{
-    nodes: HashMap<K, Node<K, V>>,
+pub struct Tree<T> {
+    root: Rc<RefCell<Node<T>>>,
 }
 
-impl<K, V> Tree<K, V>
-where
-    K: Eq + Hash,
-{
+impl<T> Tree<T> {
     pub fn new() -> Self {
+        Tree { root: Node::new() }
+    }
+
+    pub fn new_with_value(value: T) -> Self {
         Tree {
-            nodes: HashMap::new(),
+            root: Node::new_with_value(value),
         }
     }
 
-    pub fn insert(&mut self, key: K, node: Node<K, V>) -> Option<Node<K, V>> {
-        self.nodes.insert(key, node)
+    pub fn get_root(&self) -> Ref<Node<T>> {
+        (*self.root).borrow()
     }
 
-    pub fn insert_leaf(&mut self, key: K, value: V) -> Option<Node<K, V>> {
-        self.nodes.insert(key, Node::Leaf(value))
-    }
-
-    pub fn insert_branch(&mut self, key: K, value: Tree<K, V>) -> Option<Node<K, V>> {
-        self.nodes.insert(key, Node::Branch(Box::new(value)))
-    }
-
-    pub fn create_branch(mut self, key: K) -> Option<Node<K, V>> {
-        self.nodes
-            .insert(key, Node::Branch(Box::new(Tree::<K, V>::new())))
-    }
-
-    pub fn get(&self, key: &K) -> Option<&Node<K, V>> {
-        self.nodes.get(key)
-    }
-
-    pub fn get_branch(&self, key: &K) -> Option<&Box<Tree<K, V>>> {
-        match self.get(key) {
-            Some(Node::Branch(subtree)) => Some(subtree),
-            _ => None,
-        }
-    }
-
-    pub fn get_leaf(&self, key: &K) -> Option<&V> {
-        match self.get(key) {
-            Some(Node::Leaf(value)) => Some(value),
-            _ => None,
-        }
-    }
-
-    pub fn get_mut(&mut self, key: &K) -> Option<&mut Node<K, V>> {
-        self.nodes.get_mut(key)
-    }
-
-    pub fn get_branch_mut(&mut self, key: &K) -> Option<&mut Box<Tree<K, V>>> {
-        match self.get_mut(key) {
-            Some(Node::Branch(subtree)) => Some(subtree),
-            _ => None,
-        }
-    }
-
-    pub fn get_leaf_mut(&mut self, key: &K) -> Option<&mut V> {
-        match self.get_mut(key) {
-            Some(Node::Leaf(value)) => Some(value),
-            _ => None,
-        }
+    pub fn get_root_mut(&mut self) -> RefMut<Node<T>> {
+        (*self.root).borrow_mut()
     }
 }
 
-impl<K, V> Index<K> for Tree<K, V>
-where
-    K: Eq + Hash,
-{
-    type Output = Node<K, V>;
-
-    fn index(&self, index: K) -> &Self::Output {
-        &self.nodes[&index]
-    }
-}
+// impl<T> DerefMut for Tree<T> {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         Rc::new(self.get_root_mut())
+//     }
+// }
+// impl<T> IntoIterator for Tree<T>
+// where
+//     K: Eq + Hash,
+// {
+//     type Item = Node<T>;
+//     fn into_iter(self) -> Self::IntoIter {}
+// }
