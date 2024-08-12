@@ -1,5 +1,6 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
+    marker::PhantomData,
     rc::{Rc, Weak},
 };
 
@@ -8,42 +9,35 @@ pub struct Node<T> {
     me: Weak<RefCell<Node<T>>>,
     children: Option<Vec<Rc<RefCell<Node<T>>>>>,
     parent: Option<Weak<RefCell<Node<T>>>>,
-    value: Option<T>,
+    value: T,
 }
 
-impl<T> Node<T> {
-    pub fn new() -> Rc<RefCell<Self>> {
+impl<'a, T> Node<T> {
+    pub fn new(value: T) -> Rc<RefCell<Self>> {
         Rc::new_cyclic(|me| {
             RefCell::new(Node {
                 children: None,
                 parent: None,
-                value: None,
-                me: me.clone(),
-            })
-        })
-    }
-
-    pub fn new_with_value(value: T) -> Rc<RefCell<Self>> {
-        Rc::new_cyclic(|me| {
-            RefCell::new(Node {
-                children: None,
-                parent: None,
-                value: Some(value),
+                value,
                 me: me.clone(),
             })
         })
     }
 
     pub fn set_value(&mut self, value: T) {
-        self.value = Some(value);
+        self.value = value;
     }
 
-    pub fn get_value(&self) -> Option<&T> {
-        self.value.as_ref()
+    pub fn get_value_owned(self) -> T {
+        self.value
     }
 
-    pub fn get_value_mut(&mut self) -> Option<&mut T> {
-        self.value.as_mut()
+    pub fn get_value(&'a self) -> &'a T {
+        &self.value
+    }
+
+    pub fn get_value_mut(&'a mut self) -> &'a mut T {
+        &mut self.value
     }
 
     fn set_parent(&mut self, parent: Weak<RefCell<Node<T>>>) {
@@ -55,7 +49,7 @@ impl<T> Node<T> {
     }
 
     pub fn insert_child_value(&mut self, value: T) {
-        let child = Self::new_with_value(value);
+        let child = Self::new(value);
         self.graft(child);
     }
 
@@ -68,6 +62,26 @@ impl<T> Node<T> {
             children.push(other);
         }
     }
+
+    pub fn dfs_iter(&'a self) -> DfsTreeIterator<'a, T> {
+        DfsTreeIterator::from_node(self)
+    }
+}
+
+pub struct DfsTreeIterator<'a, T> {
+    iter_stack: Vec<DfsTreeIterator<'a, T>>,
+    _marker: PhantomData<&'a T>, // You stupid son of a bitch.
+}
+
+impl<'a, T> Iterator for DfsTreeIterator<'a, T> {
+    type Item = T;
+    fn next(&mut self) -> Option<Self::Item> {}
+}
+
+impl<'a, T> DfsTreeIterator<'a, T> {
+    fn from_node(node: &Node<T>) -> DfsTreeIterator<'a, T> {
+        todo!();
+    }
 }
 
 #[derive(Debug)]
@@ -76,13 +90,9 @@ pub struct Tree<T> {
 }
 
 impl<T> Tree<T> {
-    pub fn new() -> Self {
-        Tree { root: Node::new() }
-    }
-
-    pub fn new_with_value(value: T) -> Self {
+    pub fn new(root_value: T) -> Self {
         Tree {
-            root: Node::new_with_value(value),
+            root: Node::new(root_value),
         }
     }
 
