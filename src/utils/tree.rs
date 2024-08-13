@@ -1,119 +1,217 @@
+use core::fmt::Debug;
 use std::{
-    cell::{Ref, RefCell, RefMut},
+    collections::{vec_deque, VecDeque},
     marker::PhantomData,
-    rc::{Rc, Weak},
+    rc::Rc,
 };
 
+pub use std::cell::{Ref, RefCell, RefMut};
+
 #[derive(Debug)]
-pub struct Node<T> {
-    me: Weak<RefCell<Node<T>>>,
-    children: Option<Vec<Rc<RefCell<Node<T>>>>>,
-    parent: Option<Weak<RefCell<Node<T>>>>,
-    value: T,
+pub struct Tree<'a, T> {
+    children: Vec<Tree<'a, T>>,
+    value: Rc<RefCell<T>>,
+    _marker: PhantomData<&'a T>,
 }
 
-impl<'a, T> Node<T> {
-    pub fn new(value: T) -> Rc<RefCell<Self>> {
-        Rc::new_cyclic(|me| {
-            RefCell::new(Node {
-                children: None,
-                parent: None,
-                value,
-                me: me.clone(),
-            })
-        })
+impl<'a, T> Tree<'a, T> {
+    pub fn new(value: T) -> Self {
+        Tree {
+            children: Vec::new(),
+            value: Rc::new(RefCell::new(value)),
+            _marker: PhantomData,
+        }
     }
 
-    pub fn set_value(&mut self, value: T) {
-        self.value = value;
+    pub fn get_value(&'a self) -> Ref<'a, T> {
+        self.value.borrow()
     }
 
-    pub fn get_value_owned(self) -> T {
-        self.value
+    pub fn get_value_mut(&'a mut self) -> RefMut<'a, T> {
+        self.value.borrow_mut()
     }
 
-    pub fn get_value(&'a self) -> &'a T {
-        &self.value
+    pub fn replace(&mut self, value: T) -> T {
+        self.value.replace(value)
     }
 
-    pub fn get_value_mut(&'a mut self) -> &'a mut T {
-        &mut self.value
-    }
-
-    fn set_parent(&mut self, parent: Weak<RefCell<Node<T>>>) {
-        self.parent = Some(parent);
-    }
-
-    pub fn get_parent(&self) -> Option<Weak<RefCell<Node<T>>>> {
-        self.parent.as_ref().map(|x| x.clone())
+    pub fn insert_child(&mut self, child: Tree<'a, T>) {
+        self.children.push(child);
     }
 
     pub fn insert_child_value(&mut self, value: T) {
-        let child = Self::new(value);
-        self.graft(child);
+        self.insert_child(Tree::new(value));
     }
 
-    pub fn graft(&mut self, other: Rc<RefCell<Node<T>>>) {
-        if self.children.is_none() {
-            self.children = Some(Vec::new());
-        }
-        if let Some(children) = &mut self.children {
-            (*other).borrow_mut().set_parent(self.me.clone());
-            children.push(other);
+    pub fn get_child(&self, index: usize) -> Option<&Tree<'a, T>> {
+        self.children.get(index)
+    }
+
+    pub fn get_child_mut(&mut self, index: usize) -> Option<&mut Tree<'a, T>> {
+        self.children.get_mut(index)
+    }
+
+    pub fn remove(&mut self, index: usize) -> Tree<T> {
+        let x = self.children.remove(index);
+        Tree {
+            children: x.children,
+            value: x.value,
+            _marker: PhantomData,
         }
     }
 
     pub fn dfs_iter(&'a self) -> DfsTreeIterator<'a, T> {
-        DfsTreeIterator::from_node(self)
+        DfsTreeIterator::new(self)
     }
-}
 
-pub struct DfsTreeIterator<'a, T> {
-    iter_stack: Vec<DfsTreeIterator<'a, T>>,
-    _marker: PhantomData<&'a T>, // You stupid son of a bitch.
-}
-
-impl<'a, T> Iterator for DfsTreeIterator<'a, T> {
-    type Item = T;
-    fn next(&mut self) -> Option<Self::Item> {}
-}
-
-impl<'a, T> DfsTreeIterator<'a, T> {
-    fn from_node(node: &Node<T>) -> DfsTreeIterator<'a, T> {
-        todo!();
+    pub fn bfs_iter(&'a self) -> BfsTreeIterator<'a, T> {
+        BfsTreeIterator::new(self)
     }
 }
 
 #[derive(Debug)]
-pub struct Tree<T> {
-    root: Rc<RefCell<Node<T>>>,
+struct TreeIteratorState<'a, T> {
+    tree: &'a Tree<'a, T>,
+    child_index: usize,
+    visited: bool,
+    depth: usize,
 }
 
-impl<T> Tree<T> {
-    pub fn new(root_value: T) -> Self {
-        Tree {
-            root: Node::new(root_value),
+impl<'a, T> TreeIteratorState<'a, T> {
+    pub fn unvisited(tree: &'a Tree<'a, T>) -> Self {
+        Self {
+            tree,
+            child_index: 0,
+            visited: false,
+            depth: 0,
         }
     }
 
-    pub fn get_root(&self) -> Ref<Node<T>> {
-        (*self.root).borrow()
+    pub fn visited(tree: &'a Tree<'a, T>) -> Self {
+        Self {
+            tree,
+            child_index: 0,
+            visited: true,
+            depth: 0,
+        }
     }
 
-    pub fn get_root_mut(&mut self) -> RefMut<Node<T>> {
-        (*self.root).borrow_mut()
+    pub fn at_index(tree: &'a Tree<'a, T>, child_index: usize) -> Self {
+        Self {
+            tree,
+            child_index,
+            visited: true,
+            depth: 0,
+        }
+    }
+
+    pub fn with_depth(mut self, depth: usize) -> Self {
+        self.depth = depth;
+        self
     }
 }
 
-// impl<T> DerefMut for Tree<T> {
-//     fn deref_mut(&mut self) -> &mut Self::Target {
-//         Rc::new(self.get_root_mut())
-//     }
-// }
-// impl<T> IntoIterator for Tree<T>
-// where
-//     K: Eq + Hash,
-// {
-//     type Item = Node<T>;
-//     fn into_iter(self) -> Self::IntoIter {}
-// }
+pub struct DfsTreeIterator<'a, T> {
+    iter_stack: Vec<TreeIteratorState<'a, T>>,
+    max_depth: usize,
+}
+
+impl<'a, T> DfsTreeIterator<'a, T> {
+    fn new(tree: &'a Tree<T>) -> Self {
+        Self {
+            iter_stack: vec![TreeIteratorState::unvisited(tree)],
+            max_depth: 0,
+        }
+    }
+
+    pub fn max_depth(mut self, max_depth: usize) -> Self {
+        self.max_depth = max_depth;
+        self
+    }
+}
+
+impl<'a, T> Iterator for DfsTreeIterator<'a, T>
+where
+    T: Debug,
+{
+    type Item = Ref<'a, T>;
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(state) = self.iter_stack.pop() {
+            if !state.visited {
+                let value = state.tree.get_value();
+                self.iter_stack
+                    .push(TreeIteratorState::visited(state.tree).with_depth(state.depth));
+                return Some(value);
+            }
+
+            if state.depth >= self.max_depth && self.max_depth > 0 {
+                continue;
+            }
+
+            if let Some(child) = state.tree.get_child(state.child_index) {
+                self.iter_stack.push(
+                    TreeIteratorState::at_index(state.tree, state.child_index + 1)
+                        .with_depth(state.depth),
+                );
+                let value = child.get_value();
+                self.iter_stack
+                    .push(TreeIteratorState::visited(child).with_depth(state.depth + 1));
+                return Some(value);
+            }
+        }
+
+        None
+    }
+}
+pub struct BfsTreeIterator<'a, T> {
+    iter_stack: VecDeque<TreeIteratorState<'a, T>>,
+    max_depth: usize,
+}
+
+impl<'a, T> BfsTreeIterator<'a, T> {
+    fn new(tree: &'a Tree<T>) -> Self {
+        Self {
+            iter_stack: VecDeque::from([TreeIteratorState::unvisited(tree)]),
+            max_depth: 0,
+        }
+    }
+
+    pub fn max_depth(mut self, max_depth: usize) -> Self {
+        self.max_depth = max_depth;
+        self
+    }
+}
+
+impl<'a, T> Iterator for BfsTreeIterator<'a, T>
+where
+    T: Debug,
+{
+    type Item = Ref<'a, T>;
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(state) = self.iter_stack.pop_front() {
+            if !state.visited {
+                let value = state.tree.get_value();
+                self.iter_stack
+                    .push_back(TreeIteratorState::visited(state.tree).with_depth(state.depth));
+                return Some(value);
+            }
+
+            if state.depth >= self.max_depth && self.max_depth > 0 {
+                continue;
+            }
+
+            if let Some(child) = state.tree.get_child(state.child_index) {
+                self.iter_stack.push_front(
+                    TreeIteratorState::at_index(state.tree, state.child_index + 1)
+                        .with_depth(state.depth),
+                );
+                let value = child.get_value();
+                self.iter_stack
+                    .push_back(TreeIteratorState::visited(child).with_depth(state.depth + 1));
+                return Some(value);
+            }
+        }
+
+        None
+    }
+}
