@@ -1,13 +1,7 @@
-use core::fmt::Debug;
-use std::{
-    collections::{vec_deque, VecDeque},
-    marker::PhantomData,
-    rc::Rc,
-};
+use std::{collections::VecDeque, marker::PhantomData, rc::Rc};
 
 pub use std::cell::{Ref, RefCell, RefMut};
 
-#[derive(Debug)]
 pub struct Tree<'a, T> {
     children: Vec<Tree<'a, T>>,
     value: Rc<RefCell<T>>,
@@ -21,6 +15,10 @@ impl<'a, T> Tree<'a, T> {
             value: Rc::new(RefCell::new(value)),
             _marker: PhantomData,
         }
+    }
+
+    pub fn get_value_pointer(&'a self) -> Rc<RefCell<T>> {
+        self.value.clone()
     }
 
     pub fn get_value(&'a self) -> Ref<'a, T> {
@@ -67,9 +65,10 @@ impl<'a, T> Tree<'a, T> {
     pub fn bfs_iter(&'a self) -> BfsTreeIterator<'a, T> {
         BfsTreeIterator::new(self)
     }
+
+    // TODO: Ergonomics, create mut iters
 }
 
-#[derive(Debug)]
 struct TreeIteratorState<'a, T> {
     tree: &'a Tree<'a, T>,
     child_index: usize,
@@ -130,10 +129,7 @@ impl<'a, T> DfsTreeIterator<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for DfsTreeIterator<'a, T>
-where
-    T: Debug,
-{
+impl<'a, T> Iterator for DfsTreeIterator<'a, T> {
     type Item = Ref<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(state) = self.iter_stack.pop() {
@@ -182,10 +178,7 @@ impl<'a, T> BfsTreeIterator<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for BfsTreeIterator<'a, T>
-where
-    T: Debug,
-{
+impl<'a, T> Iterator for BfsTreeIterator<'a, T> {
     type Item = Ref<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(state) = self.iter_stack.pop_front() {
