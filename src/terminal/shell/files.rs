@@ -3,7 +3,6 @@ use crate::utils::tree::*;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::ops::Deref;
-use std::ops::DerefMut;
 
 pub enum FileType {
     Program(fn() -> ()),
