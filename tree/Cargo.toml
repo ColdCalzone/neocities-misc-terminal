@@ -1,0 +1,14 @@
+[package]
+name = "tree"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+dhat-heap = ["dep:dhat"]    # if you are doing heap profiling
+dhat-ad-hoc = ["dep:dhat"]  # if you are doing ad hoc profiling
+
+[dependencies]
+dhat = { version = "0.3.3", optional = true }
+
+[profile.release]
+debug = 1

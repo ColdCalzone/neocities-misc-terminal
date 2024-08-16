@@ -1,5 +1,5 @@
 use crate::simple_tree;
-use crate::utils::tree::*;
+use crate::Tree;
 
 // I've never made a macro before
 // Not only is this testing the crate, it's testing me.

@@ -1,5 +1,4 @@
-use crate::simple_tree;
-use crate::utils::tree::*;
+use dhat;
 
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;

@@ -9,8 +9,6 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["console_error_panic_hook"]
-dhat-heap = ["dep:dhat"]    # if you are doing heap profiling
-dhat-ad-hoc = ["dep:dhat"]  # if you are doing ad hoc profiling
 
 [dependencies]
 wasm-bindgen = "0.2.84"
@@ -20,8 +18,11 @@ wasm-bindgen = "0.2.84"
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
 console_error_panic_hook = { version = "0.1.7", optional = true }
-dhat = { version = "0.3.3", optional = true }
 macro_hash = { path = "macro_hash/" }
+tree = { path = "tree/" }
+
+[build-dependencies]
+tree = { path = "tree/" }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"

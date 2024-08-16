@@ -2,6 +2,7 @@ use std::{collections::VecDeque, marker::PhantomData, rc::Rc};
 
 pub use std::cell::{Ref, RefCell, RefMut};
 
+#[derive(Debug)]
 pub struct Tree<'a, T> {
     children: Vec<Tree<'a, T>>,
     value: Rc<RefCell<T>>,
@@ -37,6 +38,11 @@ impl<'a, T> Tree<'a, T> {
         self.children.push(child);
     }
 
+    pub fn with_child(mut self, child: Tree<'a, T>) -> Tree<'a, T> {
+        self.insert_child(child);
+        self
+    }
+
     pub fn insert_child_value(&mut self, value: T) {
         self.insert_child(Tree::new(value));
     }
@@ -47,6 +53,10 @@ impl<'a, T> Tree<'a, T> {
 
     pub fn get_child_mut(&mut self, index: usize) -> Option<&mut Tree<'a, T>> {
         self.children.get_mut(index)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.children.is_empty()
     }
 
     pub fn remove(&mut self, index: usize) -> Tree<T> {
@@ -113,6 +123,7 @@ impl<'a, T> TreeIteratorState<'a, T> {
 pub struct DfsTreeIterator<'a, T> {
     iter_stack: Vec<TreeIteratorState<'a, T>>,
     max_depth: usize,
+    skip_root: bool,
 }
 
 impl<'a, T> DfsTreeIterator<'a, T> {
@@ -120,6 +131,7 @@ impl<'a, T> DfsTreeIterator<'a, T> {
         Self {
             iter_stack: vec![TreeIteratorState::unvisited(tree)],
             max_depth: 0,
+            skip_root: false,
         }
     }
 
@@ -127,17 +139,21 @@ impl<'a, T> DfsTreeIterator<'a, T> {
         self.max_depth = max_depth;
         self
     }
+
+    pub fn skip_root(mut self) -> Self {
+        self.skip_root = true;
+        self
+    }
 }
 
 impl<'a, T> Iterator for DfsTreeIterator<'a, T> {
-    type Item = Ref<'a, T>;
+    type Item = &'a Tree<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(state) = self.iter_stack.pop() {
-            if !state.visited {
-                let value = state.tree.get_value();
+            if !state.visited && !self.skip_root {
                 self.iter_stack
                     .push(TreeIteratorState::visited(state.tree).with_depth(state.depth));
-                return Some(value);
+                return Some(&state.tree);
             }
 
             if state.depth >= self.max_depth && self.max_depth > 0 {
@@ -149,10 +165,9 @@ impl<'a, T> Iterator for DfsTreeIterator<'a, T> {
                     TreeIteratorState::at_index(state.tree, state.child_index + 1)
                         .with_depth(state.depth),
                 );
-                let value = child.get_value();
                 self.iter_stack
                     .push(TreeIteratorState::visited(child).with_depth(state.depth + 1));
-                return Some(value);
+                return Some(child);
             }
         }
 
@@ -162,6 +177,7 @@ impl<'a, T> Iterator for DfsTreeIterator<'a, T> {
 pub struct BfsTreeIterator<'a, T> {
     iter_stack: VecDeque<TreeIteratorState<'a, T>>,
     max_depth: usize,
+    skip_root: bool,
 }
 
 impl<'a, T> BfsTreeIterator<'a, T> {
@@ -169,6 +185,7 @@ impl<'a, T> BfsTreeIterator<'a, T> {
         Self {
             iter_stack: VecDeque::from([TreeIteratorState::unvisited(tree)]),
             max_depth: 0,
+            skip_root: false,
         }
     }
 
@@ -176,17 +193,21 @@ impl<'a, T> BfsTreeIterator<'a, T> {
         self.max_depth = max_depth;
         self
     }
+
+    pub fn skip_root(mut self) -> Self {
+        self.skip_root = true;
+        self
+    }
 }
 
 impl<'a, T> Iterator for BfsTreeIterator<'a, T> {
-    type Item = Ref<'a, T>;
+    type Item = &'a Tree<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(state) = self.iter_stack.pop_front() {
-            if !state.visited {
-                let value = state.tree.get_value();
+            if !state.visited && !self.skip_root {
                 self.iter_stack
                     .push_back(TreeIteratorState::visited(state.tree).with_depth(state.depth));
-                return Some(value);
+                return Some(state.tree);
             }
 
             if state.depth >= self.max_depth && self.max_depth > 0 {
@@ -198,10 +219,9 @@ impl<'a, T> Iterator for BfsTreeIterator<'a, T> {
                     TreeIteratorState::at_index(state.tree, state.child_index + 1)
                         .with_depth(state.depth),
                 );
-                let value = child.get_value();
                 self.iter_stack
                     .push_back(TreeIteratorState::visited(child).with_depth(state.depth + 1));
-                return Some(value);
+                return Some(child);
             }
         }
 
