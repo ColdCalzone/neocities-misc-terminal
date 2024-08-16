@@ -1,4 +1,4 @@
-use crate::utils::rect::Rectangle;
+use crate::utils::pos::{Point, Rect, Size};
 use std::{fmt, sync::RwLock};
 
 pub mod key_event;
@@ -7,13 +7,12 @@ pub mod shell;
 pub struct Terminal {
     buffer: RwLock<Vec<String>>,
     scroll: usize,
-    size: Option<Rectangle>,
+    size: Option<Size>,
 }
 
 impl Terminal {
-    pub fn set_rect(mut self, rect: Rectangle) -> Self {
+    pub fn set_size(&mut self, rect: Size) {
         self.size = Some(rect);
-        self
     }
 
     fn clear(&self) {

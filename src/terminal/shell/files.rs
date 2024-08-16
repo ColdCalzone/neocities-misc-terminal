@@ -1,4 +1,3 @@
-use private::FileSystemPrivate;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -81,6 +80,8 @@ pub(crate) mod private {
 pub trait FileSystem<'a>: private::FileSystemPrivate<'a> {
     fn new_root() -> Self;
 
+    fn new_filesystem() -> Self;
+
     fn get_by_path(&'a self, path: &Path) -> Option<Ref<FSObject>>;
 }
 
@@ -90,6 +91,10 @@ impl<'a> FileSystem<'a> for Tree<'a, FSObject> {
             name: "/".into(),
             contents: HashMap::new(),
         })
+    }
+
+    fn new_filesystem() -> Self {
+        include!(concat!(env!("OUT_DIR"), "/filesystem.tree"))
     }
 
     fn get_by_path(&'a self, path: &Path) -> Option<Ref<FSObject>> {

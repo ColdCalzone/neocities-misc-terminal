@@ -1,3 +1,3 @@
 fn run() {
-    println!("Help will not come.");
+    println!("Help is on the way!.");
 }

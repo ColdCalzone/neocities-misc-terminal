@@ -26,6 +26,7 @@ tree = { path = "tree/" }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"
+crossterm = "0.28.1"
 
 [profile.release]
 # Tell `rustc` to optimize for small code size.
