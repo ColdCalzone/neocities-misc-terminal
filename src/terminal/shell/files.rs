@@ -1,8 +1,9 @@
-use crate::utils::path::*;
-use crate::utils::tree::*;
+use private::FileSystemPrivate;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::ops::Deref;
+use std::path::Path;
+use tree::*;
 
 pub enum FileType {
     Program(fn() -> ()),
@@ -46,47 +47,63 @@ impl FSObject {
     }
 }
 
-pub type FileSystem<'a> = Tree<'a, FSObject>;
+pub(crate) mod private {
+    use tree::{RefMut, Tree};
 
-impl<'a> FileSystem<'a> {
-    pub fn new_root() -> Self {
-        FileSystem::new(FSObject::Folder {
+    use super::FSObject;
+
+    pub trait FileSystemPrivate<'a> {
+        fn index_children(&'a mut self);
+    }
+
+    impl<'a> FileSystemPrivate<'a> for Tree<'a, FSObject> {
+        fn index_children(&'a mut self) {
+            let fs_ptr = self.get_value_pointer();
+            let fs_ref = fs_ptr.borrow_mut();
+            if fs_ref.is_folder() {
+                let mut i = 0usize;
+                let mut contents = RefMut::map(fs_ref, |f| match f {
+                    FSObject::File { .. } => unreachable!(),
+                    FSObject::Folder { contents, .. } => contents,
+                });
+                contents.clear();
+                while let Some(child) = self.get_child(i) {
+                    let x = child.get_value();
+                    let name = x.get_name().clone();
+                    (*contents).insert(name, i);
+                    i += 1;
+                }
+            }
+        }
+    }
+}
+
+pub trait FileSystem<'a>: private::FileSystemPrivate<'a> {
+    fn new_root() -> Self;
+
+    fn get_by_path(&'a self, path: &Path) -> Option<Ref<FSObject>>;
+}
+
+impl<'a> FileSystem<'a> for Tree<'a, FSObject> {
+    fn new_root() -> Self {
+        Tree::new(FSObject::Folder {
             name: "/".into(),
             contents: HashMap::new(),
         })
     }
 
-    pub fn get_by_path(&self, path: Path) -> Option<Ref<FSObject>> {
-        let mut out: Option<&FileSystem> = Some(self);
-        for obj in &*path {
+    fn get_by_path(&'a self, path: &Path) -> Option<Ref<FSObject>> {
+        let mut out: Option<&Tree<FSObject>> = Some(self);
+        for obj in path.components() {
             out = out.and_then(|current_obj| {
                 if let FSObject::Folder { name: _, contents } = current_obj.get_value().deref() {
                     return contents
-                        .get(obj.as_str())
+                        .get(obj.as_os_str().to_str().unwrap())
                         .and_then(|index| current_obj.get_child(*index).borrow().to_owned());
                 }
                 None
             })
         }
         out.map(|x| x.get_value())
-    }
-
-    fn index_children(&'a mut self) {
-        let fs_ptr = self.get_value_pointer();
-        let fs_ref = fs_ptr.borrow_mut();
-        if fs_ref.is_folder() {
-            let mut i = 0usize;
-            let mut contents = RefMut::map(fs_ref, |f| match f {
-                FSObject::File { .. } => unreachable!(),
-                FSObject::Folder { contents, .. } => contents,
-            });
-            contents.clear();
-            while let Some(child) = self.get_child(i) {
-                let x = child.get_value();
-                let name = x.get_name().clone();
-                (*contents).insert(name, i);
-                i += 1;
-            }
-        }
     }
 }
