@@ -1,9 +1,8 @@
 use std::collections::HashMap;
-use std::ffi::OsStr;
-use std::fs::{self, DirEntry};
+use std::env;
+use std::fs;
+use std::io;
 use std::path::Path;
-use std::{char, env};
-use std::{io, thread};
 use tree::*;
 
 // See: src/terminal/shell/files.rs
@@ -49,9 +48,9 @@ impl FSObject {
             Self::File { name, contents } => {
                 format!(
                     "FSObject::File {{
-                    name: \"{}\".into(),
-                    contents: {}
-                }}",
+    name: \"{}\".into(),
+    contents: {}
+}}",
                     name,
                     contents.instructions()
                 )
@@ -59,9 +58,9 @@ impl FSObject {
             Self::Folder { name, contents: _ } => {
                 format!(
                     "FSObject::Folder {{
-                        name: \"{}\".into(),
-                        contents: HashMap::new()
-                    }}",
+    name: \"{}\".into(),
+    contents: HashMap::new()
+}}",
                     name
                 )
             }
@@ -144,9 +143,9 @@ fn reconstruct(reconstruction: &mut String, tree: &Tree<'_, FSObject>) {
 }
 
 fn main() -> io::Result<()> {
-    // let out_dir = env::var_os("OUT_DIR").unwrap();
-    let out_dir: String = "./".into();
-    let dest_path = Path::new(&out_dir).join("filesystem.rs");
+    let out_dir = env::var_os("OUT_DIR").unwrap();
+    // let out_dir: String = "./".into();
+    let dest_path = Path::new(&out_dir).join("filesystem.tree");
 
     let mut filesystem: Tree<FSObject> = Tree::new(FSObject::Folder {
         name: "/".into(),
@@ -162,8 +161,6 @@ fn main() -> io::Result<()> {
     }
 
     fs::write(dest_path, reconstruction)?;
-
-    println!("cargo::rerun-if-changed=build.rs");
 
     Ok(())
 }
