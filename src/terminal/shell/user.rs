@@ -13,7 +13,7 @@ impl Default for User {
 }
 
 impl User {
-    fn from_name(name: &str) -> Self {
+    pub fn from_name(name: &str) -> Self {
         match name {
             "cold" => User {
                 name: "cold".into(),

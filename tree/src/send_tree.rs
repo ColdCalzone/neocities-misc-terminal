@@ -1,57 +1,49 @@
-use std::{collections::VecDeque, marker::PhantomData, rc::Rc};
+use std::{
+    collections::VecDeque,
+    marker::PhantomData,
+    sync::{Arc, RwLock},
+};
 
 pub use std::cell::{Ref, RefCell, RefMut};
 
 #[derive(Debug)]
-pub struct Tree<'a, T> {
-    children: Vec<Tree<'a, T>>,
-    value: Rc<RefCell<T>>,
+pub struct SendTree<'a, T> {
+    children: Vec<SendTree<'a, T>>,
+    value: Arc<RwLock<T>>,
     _marker: PhantomData<&'a T>,
 }
 
-impl<'a, T> Tree<'a, T> {
+impl<'a, T> SendTree<'a, T> {
     pub fn new(value: T) -> Self {
-        Tree {
+        SendTree {
             children: Vec::new(),
-            value: Rc::new(RefCell::new(value)),
+            value: Arc::new(RwLock::new(value)),
             _marker: PhantomData,
         }
     }
 
-    pub fn get_value_pointer(&'a self) -> Rc<RefCell<T>> {
+    pub fn get_value(&'a self) -> Arc<RwLock<T>> {
         self.value.clone()
     }
 
-    pub fn get_value(&'a self) -> Ref<'a, T> {
-        self.value.borrow()
-    }
-
-    pub fn get_value_mut(&'a mut self) -> RefMut<'a, T> {
-        self.value.borrow_mut()
-    }
-
-    pub fn replace(&mut self, value: T) -> T {
-        self.value.replace(value)
-    }
-
-    pub fn insert_child(&mut self, child: Tree<'a, T>) {
+    pub fn insert_child(&mut self, child: SendTree<'a, T>) {
         self.children.push(child);
     }
 
-    pub fn with_child(mut self, child: Tree<'a, T>) -> Tree<'a, T> {
+    pub fn with_child(mut self, child: SendTree<'a, T>) -> SendTree<'a, T> {
         self.insert_child(child);
         self
     }
 
     pub fn insert_child_value(&mut self, value: T) {
-        self.insert_child(Tree::new(value));
+        self.insert_child(SendTree::new(value));
     }
 
-    pub fn get_child(&self, index: usize) -> Option<&Tree<'a, T>> {
+    pub fn get_child(&self, index: usize) -> Option<&SendTree<'a, T>> {
         self.children.get(index)
     }
 
-    pub fn get_child_mut(&mut self, index: usize) -> Option<&mut Tree<'a, T>> {
+    pub fn get_child_mut(&mut self, index: usize) -> Option<&mut SendTree<'a, T>> {
         self.children.get_mut(index)
     }
 
@@ -63,35 +55,35 @@ impl<'a, T> Tree<'a, T> {
         self.children.len()
     }
 
-    pub fn remove(&mut self, index: usize) -> Tree<T> {
+    pub fn remove(&mut self, index: usize) -> SendTree<T> {
         let x = self.children.remove(index);
-        Tree {
+        SendTree {
             children: x.children,
             value: x.value,
             _marker: PhantomData,
         }
     }
 
-    pub fn dfs_iter(&'a self) -> DfsTreeIterator<'a, T> {
-        DfsTreeIterator::new(self)
+    pub fn dfs_iter(&'a self) -> DfsSendTreeIterator<'a, T> {
+        DfsSendTreeIterator::new(self)
     }
 
-    pub fn bfs_iter(&'a self) -> BfsTreeIterator<'a, T> {
-        BfsTreeIterator::new(self)
+    pub fn bfs_iter(&'a self) -> BfsSendTreeIterator<'a, T> {
+        BfsSendTreeIterator::new(self)
     }
 
     // TODO: Ergonomics, create mut iters
 }
 
-struct TreeIteratorState<'a, T> {
-    tree: &'a Tree<'a, T>,
+struct SendTreeIteratorState<'a, T> {
+    tree: &'a SendTree<'a, T>,
     child_index: usize,
     visited: bool,
     depth: usize,
 }
 
-impl<'a, T> TreeIteratorState<'a, T> {
-    pub fn unvisited(tree: &'a Tree<'a, T>) -> Self {
+impl<'a, T> SendTreeIteratorState<'a, T> {
+    pub fn unvisited(tree: &'a SendTree<'a, T>) -> Self {
         Self {
             tree,
             child_index: 0,
@@ -100,7 +92,7 @@ impl<'a, T> TreeIteratorState<'a, T> {
         }
     }
 
-    pub fn visited(tree: &'a Tree<'a, T>) -> Self {
+    pub fn visited(tree: &'a SendTree<'a, T>) -> Self {
         Self {
             tree,
             child_index: 0,
@@ -109,7 +101,7 @@ impl<'a, T> TreeIteratorState<'a, T> {
         }
     }
 
-    pub fn at_index(tree: &'a Tree<'a, T>, child_index: usize) -> Self {
+    pub fn at_index(tree: &'a SendTree<'a, T>, child_index: usize) -> Self {
         Self {
             tree,
             child_index,
@@ -124,16 +116,16 @@ impl<'a, T> TreeIteratorState<'a, T> {
     }
 }
 
-pub struct DfsTreeIterator<'a, T> {
-    iter_stack: Vec<TreeIteratorState<'a, T>>,
+pub struct DfsSendTreeIterator<'a, T> {
+    iter_stack: Vec<SendTreeIteratorState<'a, T>>,
     max_depth: usize,
     skip_root: bool,
 }
 
-impl<'a, T> DfsTreeIterator<'a, T> {
-    fn new(tree: &'a Tree<T>) -> Self {
+impl<'a, T> DfsSendTreeIterator<'a, T> {
+    fn new(tree: &'a SendTree<T>) -> Self {
         Self {
-            iter_stack: vec![TreeIteratorState::unvisited(tree)],
+            iter_stack: vec![SendTreeIteratorState::unvisited(tree)],
             max_depth: 0,
             skip_root: false,
         }
@@ -150,13 +142,13 @@ impl<'a, T> DfsTreeIterator<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for DfsTreeIterator<'a, T> {
-    type Item = &'a Tree<'a, T>;
+impl<'a, T> Iterator for DfsSendTreeIterator<'a, T> {
+    type Item = &'a SendTree<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(state) = self.iter_stack.pop() {
             if !state.visited && !self.skip_root {
                 self.iter_stack
-                    .push(TreeIteratorState::visited(state.tree).with_depth(state.depth));
+                    .push(SendTreeIteratorState::visited(state.tree).with_depth(state.depth));
                 return Some(&state.tree);
             }
 
@@ -166,11 +158,11 @@ impl<'a, T> Iterator for DfsTreeIterator<'a, T> {
 
             if let Some(child) = state.tree.get_child(state.child_index) {
                 self.iter_stack.push(
-                    TreeIteratorState::at_index(state.tree, state.child_index + 1)
+                    SendTreeIteratorState::at_index(state.tree, state.child_index + 1)
                         .with_depth(state.depth),
                 );
                 self.iter_stack
-                    .push(TreeIteratorState::visited(child).with_depth(state.depth + 1));
+                    .push(SendTreeIteratorState::visited(child).with_depth(state.depth + 1));
                 return Some(child);
             }
         }
@@ -178,16 +170,16 @@ impl<'a, T> Iterator for DfsTreeIterator<'a, T> {
         None
     }
 }
-pub struct BfsTreeIterator<'a, T> {
-    iter_stack: VecDeque<TreeIteratorState<'a, T>>,
+pub struct BfsSendTreeIterator<'a, T> {
+    iter_stack: VecDeque<SendTreeIteratorState<'a, T>>,
     max_depth: usize,
     skip_root: bool,
 }
 
-impl<'a, T> BfsTreeIterator<'a, T> {
-    fn new(tree: &'a Tree<T>) -> Self {
+impl<'a, T> BfsSendTreeIterator<'a, T> {
+    fn new(tree: &'a SendTree<T>) -> Self {
         Self {
-            iter_stack: VecDeque::from([TreeIteratorState::unvisited(tree)]),
+            iter_stack: VecDeque::from([SendTreeIteratorState::unvisited(tree)]),
             max_depth: 0,
             skip_root: false,
         }
@@ -204,13 +196,13 @@ impl<'a, T> BfsTreeIterator<'a, T> {
     }
 }
 
-impl<'a, T> Iterator for BfsTreeIterator<'a, T> {
-    type Item = &'a Tree<'a, T>;
+impl<'a, T> Iterator for BfsSendTreeIterator<'a, T> {
+    type Item = &'a SendTree<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(state) = self.iter_stack.pop_front() {
             if !state.visited && !self.skip_root {
                 self.iter_stack
-                    .push_back(TreeIteratorState::visited(state.tree).with_depth(state.depth));
+                    .push_back(SendTreeIteratorState::visited(state.tree).with_depth(state.depth));
                 return Some(state.tree);
             }
 
@@ -220,11 +212,11 @@ impl<'a, T> Iterator for BfsTreeIterator<'a, T> {
 
             if let Some(child) = state.tree.get_child(state.child_index) {
                 self.iter_stack.push_front(
-                    TreeIteratorState::at_index(state.tree, state.child_index + 1)
+                    SendTreeIteratorState::at_index(state.tree, state.child_index + 1)
                         .with_depth(state.depth),
                 );
                 self.iter_stack
-                    .push_back(TreeIteratorState::visited(child).with_depth(state.depth + 1));
+                    .push_back(SendTreeIteratorState::visited(child).with_depth(state.depth + 1));
                 return Some(child);
             }
         }

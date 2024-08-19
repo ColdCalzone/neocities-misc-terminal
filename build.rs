@@ -15,7 +15,14 @@ impl FileType {
     fn instructions(&self) -> String {
         match self {
             Self::Program(x) => {
-                format!("FileType::Program({})", x)
+                format!(
+                    "FileType::Program({{
+                        {}
+
+                        run
+                    }})",
+                    x
+                )
             }
             Self::Binary(x) => {
                 format!(
@@ -92,14 +99,7 @@ fn read_filesystem(filesystem: &mut Tree<FSObject>, dir: &Path) -> io::Result<()
                                     .to_str()
                                     .unwrap(),
                             ),
-                            contents: FileType::Program(format!(
-                                "{{
-                                    {}
-
-                                    run
-                                }}",
-                                fs::read_to_string(path)?
-                            )),
+                            contents: FileType::Program(fs::read_to_string(path)?.to_string()),
                         });
                         filesystem.insert_child(child);
 
@@ -134,12 +134,13 @@ fn reconstruct(reconstruction: &mut String, tree: &Tree<'_, FSObject>) {
         )
     }
 
-    reconstruction.push_str(&format!("Tree::new({})", fsobj.instructions()));
+    reconstruction.push_str(&format!("SendTree::new({})", fsobj.instructions()));
 
     tree.bfs_iter().max_depth(1).skip_root().for_each(|x| {
         reconstruct(reconstruction, x);
         reconstruction.push(')');
-    })
+    });
+    reconstruction.push_str(".indexed()");
 }
 
 fn main() -> io::Result<()> {

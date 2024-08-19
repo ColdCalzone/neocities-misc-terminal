@@ -1,11 +1,17 @@
-use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::ops::Deref;
 use std::path::Path;
-use tree::*;
+use std::sync::mpsc::Receiver;
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard, RwLock};
+use std::{borrow::Borrow, sync::mpsc::Sender};
+use tree::send_tree::*;
 
+use crate::session::{InputMessage, OutputMessage, SessionMessage};
+
+pub static FILESYSTEM: LazyLock<SendTree<FSObject>> = LazyLock::new(|| SendTree::new_filesystem());
+
+pub type Program = Box<dyn FnOnce(Vec<String>, Receiver<SessionMessage>, Sender<SessionMessage>)>;
 pub enum FileType {
-    Program(fn() -> ()),
+    Program(fn() -> Program),
     Binary(Vec<u8>),
 }
 
@@ -46,48 +52,23 @@ impl FSObject {
     }
 }
 
-pub(crate) mod private {
-    use tree::{RefMut, Tree};
+pub type AsyncFSObject = Arc<RwLock<FSObject>>;
 
-    use super::FSObject;
-
-    pub trait FileSystemPrivate<'a> {
-        fn index_children(&'a mut self);
-    }
-
-    impl<'a> FileSystemPrivate<'a> for Tree<'a, FSObject> {
-        fn index_children(&'a mut self) {
-            let fs_ptr = self.get_value_pointer();
-            let fs_ref = fs_ptr.borrow_mut();
-            if fs_ref.is_folder() {
-                let mut i = 0usize;
-                let mut contents = RefMut::map(fs_ref, |f| match f {
-                    FSObject::File { .. } => unreachable!(),
-                    FSObject::Folder { contents, .. } => contents,
-                });
-                contents.clear();
-                while let Some(child) = self.get_child(i) {
-                    let x = child.get_value();
-                    let name = x.get_name().clone();
-                    (*contents).insert(name, i);
-                    i += 1;
-                }
-            }
-        }
-    }
-}
-
-pub trait FileSystem<'a>: private::FileSystemPrivate<'a> {
+pub trait FileSystem<'a> {
     fn new_root() -> Self;
 
     fn new_filesystem() -> Self;
 
-    fn get_by_path(&'a self, path: &Path) -> Option<Ref<FSObject>>;
+    fn get_by_path(&'a self, path: &Path) -> Option<AsyncFSObject>;
+
+    fn index_children(&mut self);
+
+    fn indexed(self) -> Self;
 }
 
-impl<'a> FileSystem<'a> for Tree<'a, FSObject> {
+impl<'a> FileSystem<'a> for SendTree<'a, FSObject> {
     fn new_root() -> Self {
-        Tree::new(FSObject::Folder {
+        SendTree::new(FSObject::Folder {
             name: "/".into(),
             contents: HashMap::new(),
         })
@@ -97,18 +78,55 @@ impl<'a> FileSystem<'a> for Tree<'a, FSObject> {
         include!(concat!(env!("OUT_DIR"), "/filesystem.tree"))
     }
 
-    fn get_by_path(&'a self, path: &Path) -> Option<Ref<FSObject>> {
-        let mut out: Option<&Tree<FSObject>> = Some(self);
-        for obj in path.components() {
+    fn get_by_path(&'a self, path: &Path) -> Option<AsyncFSObject> {
+        let mut out: Option<&SendTree<FSObject>> = Some(self);
+        let mut components = path.components();
+        components.next(); // remove "/"
+        for obj in components {
+            println!("{}", obj.as_os_str().to_string_lossy());
             out = out.and_then(|current_obj| {
-                if let FSObject::Folder { name: _, contents } = current_obj.get_value().deref() {
+                let ref_arc = current_obj.get_value();
+                let fsobj = ref_arc.read().expect("Couldn't get lock on folder");
+                if let FSObject::Folder {
+                    name: _,
+                    ref contents,
+                } = *fsobj
+                {
                     return contents
                         .get(obj.as_os_str().to_str().unwrap())
                         .and_then(|index| current_obj.get_child(*index).borrow().to_owned());
                 }
+
                 None
             })
         }
-        out.map(|x| x.get_value())
+        out.map(|x| x.get_value().clone())
+    }
+
+    fn index_children(&mut self) {
+        let fs_ptr = self.get_value();
+        let mut fs_ref = (fs_ptr).write().expect("Couldn't get write access to file");
+        if fs_ref.is_folder() {
+            let mut i = 0usize;
+            let contents = match *fs_ref {
+                FSObject::File { .. } => unreachable!(),
+                FSObject::Folder {
+                    ref mut contents, ..
+                } => contents,
+            };
+            contents.clear();
+            while let Some(child) = self.get_child(i) {
+                let child_ref = child.get_value();
+                let x = child_ref.read().expect("Couldn't get read access to file");
+                let name = x.get_name().clone();
+                contents.insert(name, i);
+                i += 1;
+            }
+        }
+    }
+
+    fn indexed(mut self) -> Self {
+        self.index_children();
+        self
     }
 }

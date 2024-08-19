@@ -2,6 +2,9 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+mod session;
+pub use session::Session;
+mod key_events;
 mod terminal;
 mod utils;
 
@@ -12,4 +15,6 @@ mod tests;
 #[wasm_bindgen]
 pub fn greet() {}
 
-pub fn get_terminal() -> Terminal {}
+pub fn get_session() -> Session {
+    session::Session::get_session()
+}
