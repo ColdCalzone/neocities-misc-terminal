@@ -1,46 +1,66 @@
-use crate::terminal::{
-    shell::{user::User, DefaultShell, Shell},
-    Terminal,
+use crate::{
+    key_events::*,
+    terminal::{
+        shell::{user::User, DefaultShell, Shell},
+        DefaultTerminal, Terminal,
+    },
 };
 
+use std::{path::PathBuf, sync::mpsc::channel};
 use std::{
-    path::PathBuf,
-    sync::{
-        mpsc::{channel, TryRecvError},
-        Mutex,
-    },
-    thread::JoinHandle,
-};
-use std::{
-    sync::{
-        mpsc::{Receiver, Sender},
-        Arc,
-    },
+    sync::mpsc::{Receiver, Sender},
     thread,
 };
 
-#[derive(Debug)]
-pub enum InputMessage {
-    InputKeyEvent(crate::key_events::KeyEvent),
-    ShellChangeCwd(PathBuf),
+pub enum EventLoopError {
+    ChannelClosed,
 }
 
+pub enum BudgetNever {}
+
+pub trait EventLoop {
+    fn event_loop(
+        &mut self,
+        receiver: Receiver<SessionMessage>,
+        sender: Sender<SessionMessage>,
+    ) -> Result<BudgetNever, EventLoopError>;
+}
+
+/// Messages sent to the shell / running processes
+#[derive(Debug)]
+pub enum ShellMessage {
+    /// Sent to the shell to pass to the current running program
+    InputKeyEvent(KeyEvent),
+    /// Sent to the shell to instruct it to change the CWD
+    ChangeCwd(PathBuf),
+}
+
+/// Messages sent to the terminal
+#[derive(Debug)]
+pub enum TerminalMessage {
+    /// Sent to the terminal to add the line to the buffer
+    PushLine(String),
+    /// Sent to the terminal to add the text to the current line of the buffer
+    Push(String),
+    /// Send to the terminal to make it send OutputMessage::Display with its contents
+    ForceUpdate,
+}
+
+/// Messages sent to the output handler
 #[derive(Debug)]
 pub enum OutputMessage {
-    /// Sent to the output handler, should be `terminal.to_string()` 99.99% of the time
+    /// Display payload to the screen. Should be `terminal.to_string()` 99.99% of the time
     Display(String),
-    /// Sent to the `Terminal`
-    PushLine(String),
-    /// Sent to the `Terminal`, forces it to then send `Display`.
-    ForceUpdate,
 }
 
 /// A message sent between the input and output threads of the `Session`.
 #[derive(Debug)]
 pub enum SessionMessage {
-    Input(InputMessage),
-    Output(OutputMessage),
+    Terminal(TerminalMessage, Option<Sender<SessionMessage>>),
+    Shell(ShellMessage, Option<Sender<SessionMessage>>),
+    Output(OutputMessage, Option<Sender<SessionMessage>>),
     Interrupt,
+    Resize(usize, usize),
 }
 
 /// The highest-level container of a `Terminal` and `Shell`.
@@ -48,118 +68,51 @@ pub enum SessionMessage {
 pub struct Session {
     input: Sender<SessionMessage>,
     output: Sender<SessionMessage>,
-    output_handler: Arc<Mutex<Receiver<SessionMessage>>>,
-    output_handler_thread: Option<JoinHandle<()>>,
+    receiver: Receiver<SessionMessage>,
+    sender_self: Sender<SessionMessage>,
+    output_handler: Option<Sender<SessionMessage>>,
+    input_handler: Option<Sender<SessionMessage>>,
 }
 
 impl Session {
     pub fn get_session() -> Self {
-        let terminal = Terminal::new();
-        let shell = DefaultShell::new_in_home(User::from_name("guest"));
+        let mut term = DefaultTerminal::new();
+        let mut shell = DefaultShell::new_in_home(User::from_name("guest"));
 
-        let (to_output, for_output) = channel::<SessionMessage>();
-        let (to_input, for_input) = channel::<SessionMessage>();
+        let (tx, rx) = channel::<SessionMessage>();
 
-        let (output_to_thread, thread_from_output) = channel::<SessionMessage>();
+        let tx_shell = tx.clone();
+        let tx_term = tx.clone();
+
+        let (tx_to_input, rx_to_input) = channel::<SessionMessage>();
+        let (tx_to_output, rx_to_output) = channel::<SessionMessage>();
 
         let _output_thread = thread::spawn(move || {
-            let rx = for_output;
-            let tx = output_to_thread;
-            let mut terminal = terminal;
-
-            loop {
-                match rx.recv() {
-                    Ok(SessionMessage::Output(OutputMessage::ForceUpdate)) => {
-                        tx.send(SessionMessage::Output(OutputMessage::Display(
-                            terminal.to_string(),
-                        )))
-                        .unwrap();
-                    }
-                    Ok(SessionMessage::Output(OutputMessage::PushLine(x))) => {
-                        terminal
-                            .get_buffer()
-                            .lock()
-                            .map(|mut buff| {
-                                buff.push(x);
-                            })
-                            .unwrap();
-                    }
-                    Err(_) => {
-                        eprintln!("Output thread disconnected!");
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-            // tx.send(SessionMessage::Output(OutputMessage::Display(
-            //     terminal.to_string(),
-            // )))
-            // .unwrap();
-            // rx.recv().unwrap()
+            term.event_loop(rx_to_output, tx_term);
         });
 
-        let tx_output = to_output.clone();
         let _input_thread = thread::spawn(move || {
-            let rx = for_input;
-            let mut shell = shell;
-            loop {
-                if shell.get_running_process().is_none() {
-                    shell.run_startup(vec![]);
-                }
-                match rx.try_recv() {
-                    Ok(SessionMessage::Input(m)) => {
-                        shell.process_message(m);
-                    }
-                    Ok(SessionMessage::Output(m)) => {
-                        tx_output.send(SessionMessage::Output(m)).unwrap();
-                    }
-                    Err(TryRecvError::Disconnected) => {
-                        eprintln!("Input thread disconnected!");
-                        break;
-                    }
-                    _ => {}
-                }
-
-                if let Some(process) = shell.get_running_process() {
-                    match process.receiver.try_recv() {
-                        Ok(SessionMessage::Input(m)) => {
-                            shell.process_message(m);
-                        }
-                        Ok(SessionMessage::Output(m)) => {
-                            tx_output.send(SessionMessage::Output(m)).unwrap();
-                        }
-                        Err(TryRecvError::Disconnected) => {
-                            eprintln!("Shell Process: Input thread disconnected!");
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
-            }
+            shell.event_loop(rx_to_input, tx_shell);
         });
 
         Self {
-            input: to_input,
-            output: to_output,
-            output_handler: Arc::new(Mutex::new(thread_from_output)),
-            output_handler_thread: None,
+            input: tx_to_input,
+            output: tx_to_output,
+            receiver: rx,
+            sender_self: tx,
+            output_handler: None,
+            input_handler: None,
         }
     }
 
     /// *Pending a rename.* \
     /// Accepts a closure which takes `SessionMessage`s as an argument
     pub fn output_handler(&mut self, output_function: fn(String) -> ()) {
-        let rx = self.output_handler.clone();
-        self.output_handler_thread = Some(thread::spawn(move || {
-            let lock = match rx.lock() {
-                Ok(x) => x,
-                Err(e) => {
-                    eprintln!("Error locking output receiver: {e}");
-                    return;
-                }
-            };
+        let (tx, rx) = channel::<SessionMessage>();
+        self.output_handler = Some(tx);
+        thread::spawn(move || {
             loop {
-                let message = match lock.recv() {
+                let message = match rx.recv() {
                     Ok(x) => x,
                     Err(e) => {
                         println!("Message failed on output handler, probably no big deal, but...");
@@ -169,7 +122,7 @@ impl Session {
                 };
 
                 match message {
-                    SessionMessage::Output(x) => {
+                    SessionMessage::Output(x, _) => {
                         if let OutputMessage::Display(x) = x {
                             output_function(x);
                         }
@@ -184,6 +137,50 @@ impl Session {
                 }
             }
             println!("Output thread closed");
-        }));
+        });
+    }
+
+    pub fn input_handler(&mut self, input_function: fn() -> Option<SessionMessage>) {
+        let (tx, rx) = channel::<SessionMessage>();
+        let sender = self.sender_self.clone();
+        self.input_handler = Some(tx);
+        thread::spawn(move || loop {
+            if let Some(m) = input_function() {
+                sender.send(m).unwrap();
+            }
+        });
+    }
+
+    pub fn run(self) {
+        loop {
+            let message_result = self.receiver.recv();
+            match message_result {
+                Ok(m) => match m {
+                    SessionMessage::Shell(_, _) => {
+                        self.input.send(m);
+                    }
+                    SessionMessage::Terminal(_, _) => {
+                        self.output.send(m);
+                    }
+                    SessionMessage::Output(_, _) => {
+                        if let Some(ref output_handler) = self.output_handler {
+                            output_handler.send(m);
+                        }
+                    }
+                    SessionMessage::Resize(_, _) => todo!(),
+                    SessionMessage::Interrupt => {
+                        self.input.send(SessionMessage::Interrupt);
+                        self.output.send(SessionMessage::Interrupt);
+                        println!("Session: Interrupt received!");
+                        break;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Session has encountered an error: {e}");
+                    break;
+                }
+            }
+        }
+        println!("Session closed");
     }
 }

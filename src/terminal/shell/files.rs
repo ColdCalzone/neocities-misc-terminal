@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::mpsc::Receiver;
-use std::sync::{Arc, LazyLock, Mutex, MutexGuard, RwLock};
+use std::sync::{Arc, LazyLock, RwLock};
 use std::{borrow::Borrow, sync::mpsc::Sender};
 use tree::send_tree::*;
 
-use crate::session::{InputMessage, OutputMessage, SessionMessage};
+use crate::session::SessionMessage;
 
 pub static FILESYSTEM: LazyLock<SendTree<FSObject>> = LazyLock::new(|| SendTree::new_filesystem());
 
@@ -83,7 +83,6 @@ impl<'a> FileSystem<'a> for SendTree<'a, FSObject> {
         let mut components = path.components();
         components.next(); // remove "/"
         for obj in components {
-            println!("{}", obj.as_os_str().to_string_lossy());
             out = out.and_then(|current_obj| {
                 let ref_arc = current_obj.get_value();
                 let fsobj = ref_arc.read().expect("Couldn't get lock on folder");

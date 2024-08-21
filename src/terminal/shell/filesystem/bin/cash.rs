@@ -2,7 +2,7 @@
 // Name derived from CA$H, the R.A.M Demo's (second) hardest challenge.
 fn run() -> Box<dyn FnOnce(Vec<String>, Receiver<SessionMessage>, Sender<SessionMessage>)> {
     use crate::key_events::*;
-    use crate::session::{InputMessage, SessionMessage};
+    use crate::session::{SessionMessage, ShellMessage};
     let mut input: String = String::new();
 
     fn get_prefix(shell_tx: &mut Sender<SessionMessage>) -> String {
@@ -20,10 +20,10 @@ fn run() -> Box<dyn FnOnce(Vec<String>, Receiver<SessionMessage>, Sender<Session
 
     Box::new(move |args, events, shell_tx| loop {
         match events.recv() {
-            Ok(SessionMessage::Input(InputMessage::InputKeyEvent(key_event))) => {
+            Ok(SessionMessage::Shell(ShellMessage::InputKeyEvent(key_event), _)) => {
                 match key_event.key_type {
-                    Key::Char { data } => {
-                        if key_event.modifier == Modifier::Shift {
+                    Key::Char(data) => {
+                        if let Some(Modifier::Shift) = key_event.modifier {
                             input.push(data.to_ascii_uppercase());
                         } else {
                             input.push(data.to_ascii_lowercase());

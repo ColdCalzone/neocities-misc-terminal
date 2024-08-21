@@ -7,7 +7,7 @@ pub enum Modifier {
 
 #[derive(Debug)]
 pub enum Key {
-    Char { data: char },
+    Char(char),
     Mod,
     Backspace,
     Enter,
@@ -16,5 +16,5 @@ pub enum Key {
 #[derive(Debug)]
 pub struct KeyEvent {
     pub key_type: Key,
-    pub modifier: Modifier,
+    pub modifier: Option<Modifier>,
 }

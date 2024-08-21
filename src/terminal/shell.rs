@@ -2,9 +2,9 @@ pub mod files;
 pub mod user;
 use files::{FSObject, FileSystem, FileType, FILESYSTEM};
 use std::{
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
-        mpsc::{channel, Receiver, Sender},
+        mpsc::{channel, Receiver, Sender, TryRecvError},
         Mutex,
     },
     thread::{self, JoinHandle},
@@ -13,17 +13,19 @@ use user::User;
 
 use crate::{
     key_events::KeyEvent,
-    session::{InputMessage, SessionMessage},
+    session::{SessionMessage, ShellMessage},
 };
 
-pub trait Shell {
+use super::{BudgetNever, EventLoop, EventLoopError};
+
+pub trait Shell: EventLoop {
     fn new_at_path(path: PathBuf) -> Self;
 
     fn with_user(self, user: User) -> Self;
 
     fn new_in_home(user: User) -> Self;
 
-    fn process_message(&mut self, message: InputMessage);
+    fn process_message(&mut self, message: SessionMessage);
 
     fn get_running_process(&self) -> &Option<RunningProcess>;
 
@@ -79,16 +81,18 @@ impl Shell for DefaultShell {
         Self::new_at_path(format!("/home/{}", user.get_name()).into()).with_user(user)
     }
 
-    fn process_message(&mut self, message: InputMessage) {
-        match message {
-            InputMessage::ShellChangeCwd(path) => {
-                *(self.cwd.lock()).unwrap() = path.clone();
-                return;
+    fn process_message(&mut self, session_message: SessionMessage) {
+        if let SessionMessage::Shell(ref message, _) = session_message {
+            match message {
+                ShellMessage::InputKeyEvent(e) => {
+                    if let Some(ref running) = self.running {
+                        running.sender.send(session_message);
+                    }
+                }
+                ShellMessage::ChangeCwd(path) => {
+                    *self.cwd.lock().unwrap() = path.clone();
+                }
             }
-            _ => {}
-        }
-        if let Some(ref running) = self.running {
-            running.sender.send(SessionMessage::Input(message));
         }
     }
 
@@ -108,5 +112,38 @@ impl Shell for DefaultShell {
 
     fn run_startup(&mut self, args: Vec<String>) {
         self.run_program(self.startup, args);
+    }
+}
+
+impl EventLoop for DefaultShell {
+    fn event_loop(
+        &mut self,
+        rx: Receiver<SessionMessage>,
+        tx: Sender<SessionMessage>,
+    ) -> Result<BudgetNever, EventLoopError> {
+        loop {
+            if self.get_running_process().is_none() {
+                self.run_startup(vec![]);
+            }
+            let message = rx.try_recv();
+            match message {
+                Ok(SessionMessage::Shell(_, _)) => {
+                    self.process_message(message.unwrap());
+                }
+                Err(TryRecvError::Disconnected) => {
+                    eprintln!("Input thread disconnected!");
+                    return Err(EventLoopError::ChannelClosed);
+                }
+                _ => {}
+            }
+
+            if let Some(ref process) = self.running {
+                match process.receiver.try_recv() {
+                    Ok(message) => tx.send(message).unwrap(),
+                    Err(TryRecvError::Disconnected) => self.running = None,
+                    _ => {}
+                }
+            }
+        }
     }
 }

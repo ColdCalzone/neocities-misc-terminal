@@ -1,10 +1,10 @@
-#![allow(dead_code)]
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+use session::{SessionMessage, ShellMessage};
 mod session;
 pub use session::Session;
-mod key_events;
+pub mod key_events;
 mod terminal;
 mod utils;
 
@@ -17,4 +17,12 @@ pub fn greet() {}
 
 pub fn get_session() -> Session {
     session::Session::get_session()
+}
+
+pub fn create_input_event(key_event: key_events::KeyEvent) -> SessionMessage {
+    SessionMessage::Shell(ShellMessage::InputKeyEvent(key_event), None)
+}
+
+pub fn create_interrupt() -> SessionMessage {
+    SessionMessage::Interrupt
 }
