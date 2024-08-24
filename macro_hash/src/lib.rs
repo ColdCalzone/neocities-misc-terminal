@@ -4,9 +4,6 @@ use proc_macro::{TokenStream, TokenTree};
 use quote::quote_spanned;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-#[cfg(test)]
-mod tests;
-
 #[proc_macro]
 pub fn hash(in_stream: TokenStream) -> TokenStream {
     let mut hash = DefaultHasher::new();

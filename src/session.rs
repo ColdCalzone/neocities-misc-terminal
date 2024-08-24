@@ -163,7 +163,7 @@ impl Session {
                         self.output.send(m);
                     }
                     SessionMessage::Output(_, _) => {
-                        if let Some(ref output_handler) = self.output_handler {
+                        if let Some(output_handler) = &self.output_handler {
                             output_handler.send(m);
                         }
                     }

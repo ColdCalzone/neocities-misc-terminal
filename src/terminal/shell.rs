@@ -82,10 +82,10 @@ impl Shell for DefaultShell {
     }
 
     fn process_message(&mut self, session_message: SessionMessage) {
-        if let SessionMessage::Shell(ref message, _) = session_message {
+        if let SessionMessage::Shell(message, _) = &session_message {
             match message {
                 ShellMessage::InputKeyEvent(e) => {
-                    if let Some(ref running) = self.running {
+                    if let Some(running) = &self.running {
                         running.sender.send(session_message);
                     }
                 }
@@ -137,7 +137,7 @@ impl EventLoop for DefaultShell {
                 _ => {}
             }
 
-            if let Some(ref process) = self.running {
+            if let Some(process) = &self.running {
                 match process.receiver.try_recv() {
                     Ok(message) => tx.send(message).unwrap(),
                     Err(TryRecvError::Disconnected) => self.running = None,

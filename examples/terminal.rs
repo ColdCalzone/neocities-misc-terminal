@@ -22,7 +22,7 @@ fn main() -> io::Result<()> {
             terminal::Clear(terminal::ClearType::All),
         )
         .unwrap();
-        println!("{display}");
+        print!("{display}");
     });
 
     session.input_handler(|| {

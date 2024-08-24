@@ -8,6 +8,7 @@ use std::{
 };
 
 pub mod shell;
+pub mod style;
 
 pub trait Terminal<B>: EventLoop + fmt::Display {
     fn new() -> Self;

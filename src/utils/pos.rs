@@ -1,15 +1,9 @@
 use std::ops::AddAssign;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Point {
     x: usize,
     y: usize,
-}
-
-impl Default for Point {
-    fn default() -> Self {
-        Self { x: 0, y: 0 }
-    }
 }
 
 impl AddAssign for Point {
@@ -19,7 +13,7 @@ impl AddAssign for Point {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Size {
     height: usize,
     width: usize,
@@ -32,16 +26,16 @@ impl AddAssign for Size {
     }
 }
 
-impl Into<Rect> for Size {
-    fn into(self) -> Rect {
+impl From<Size> for Rect {
+    fn from(val: Size) -> Rect {
         Rect {
-            size: self,
+            size: val,
             origin: Point::default(),
         }
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Rect {
     origin: Point,
     size: Size,
