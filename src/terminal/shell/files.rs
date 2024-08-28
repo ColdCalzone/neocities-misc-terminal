@@ -1,11 +1,13 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, LazyLock, RwLock};
 use std::{borrow::Borrow, sync::mpsc::Sender};
 use tree::send_tree::*;
 
 use crate::session::SessionMessage;
+
+use crate::terminal::shell::user::User;
 
 pub static FILESYSTEM: LazyLock<SendTree<FSObject>> = LazyLock::new(|| SendTree::new_filesystem());
 
@@ -62,6 +64,12 @@ pub trait FileSystem<'a> {
     fn get_by_path(&'a self, path: &Path) -> Option<AsyncFSObject>;
 
     fn index_children(&mut self);
+
+    fn expand_tilde(path: &Path, home_dir: &Path) -> PathBuf;
+
+    fn make_absolute(path: &Path, cwd: &Path, home_dir: &Path) -> PathBuf;
+
+    fn resolve_path(path: &Path, cwd: &Path, home_dir: &Path) -> Result<PathBuf, ()>;
 
     fn indexed(self) -> Self;
 }
@@ -122,6 +130,41 @@ impl<'a> FileSystem<'a> for SendTree<'a, FSObject> {
                 i += 1;
             }
         }
+    }
+
+    fn expand_tilde(path: &Path, home_dir: &Path) -> PathBuf {
+        if path.starts_with("~") {
+            return home_dir.join(path.components().skip(1).collect::<PathBuf>());
+        }
+        path.into()
+    }
+
+    fn make_absolute(path: &Path, cwd: &Path, home_dir: &Path) -> PathBuf {
+        let path = Self::expand_tilde(path, home_dir);
+
+        if path.starts_with("/") {
+            return path;
+        }
+
+        cwd.join(path)
+    }
+
+    // TODO: unit error? really?
+    /// Most would call this "canonicalize". I am not most.
+    fn resolve_path(path: &Path, cwd: &Path, home_dir: &Path) -> Result<PathBuf, ()> {
+        Self::make_absolute(path, cwd, home_dir)
+            .components()
+            .try_fold(PathBuf::new(), |mut acc, comp| {
+                match comp {
+                    Component::RootDir => acc.push("/"),
+                    Component::Normal(x) => acc.push(x),
+                    Component::ParentDir => {
+                        acc.pop();
+                    }
+                    _ => {}
+                }
+                Ok(acc)
+            })
     }
 
     fn indexed(mut self) -> Self {

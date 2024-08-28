@@ -4,13 +4,15 @@ use std::{io, sync::mpsc::channel};
 use crossterm::{
     cursor,
     event::{self, KeyCode, KeyModifiers},
-    execute, terminal,
+    execute,
+    style::Print,
+    terminal,
 };
 
 use misc_terminal::{create_input_event, create_interrupt, key_events};
 
 fn main() -> io::Result<()> {
-    // terminal::enable_raw_mode()?;
+    terminal::enable_raw_mode()?;
 
     execute!(std::io::stdout(), terminal::EnterAlternateScreen,)?;
 
@@ -18,11 +20,11 @@ fn main() -> io::Result<()> {
     session.output_handler(|display| {
         execute!(
             std::io::stdout(),
-            cursor::MoveTo(0, 0),
             terminal::Clear(terminal::ClearType::All),
+            cursor::MoveTo(0, 0),
+            Print(format!("{display}").to_string())
         )
         .unwrap();
-        print!("{display}");
     });
 
     session.input_handler(|| {
@@ -62,7 +64,7 @@ fn main() -> io::Result<()> {
     session.run();
 
     execute!(std::io::stdout(), terminal::LeaveAlternateScreen,)?;
-    // terminal::disable_raw_mode()?;
+    terminal::disable_raw_mode()?;
 
     Ok(())
 }

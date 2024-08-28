@@ -1,8 +1,11 @@
 use crate::{
     key_events::*,
     terminal::{
-        shell::{user::User, DefaultShell, Shell},
-        DefaultTerminal, Terminal,
+        shell::{
+            user::{SignInError, User},
+            DefaultShell, Shell,
+        },
+        DefaultTerminal, Span, Terminal,
     },
 };
 
@@ -33,6 +36,11 @@ pub enum ShellMessage {
     InputKeyEvent(KeyEvent),
     /// Sent to the shell to instruct it to change the CWD
     ChangeCwd(PathBuf),
+    /// Sent to the shell, asking it to return the current user
+    GetCurrentUser,
+    /// Sent to the shell, asking it to sign in to the given user with the given password hash
+    /// Returns a Result<(), SignInError>
+    TrySetUser(String, Option<u64>),
 }
 
 /// Messages sent to the terminal
@@ -42,6 +50,16 @@ pub enum TerminalMessage {
     PushLine(String),
     /// Sent to the terminal to add the text to the current line of the buffer
     Push(String),
+    /// Sent to the terminal to add the text to the current line of the buffer
+    PushSpan(Span),
+    /// Clear the screen
+    Clear,
+    /// Clear the specified span. Counts from the bottom.
+    ClearSpan(usize),
+    /// Set the specified span. Counts from the bottom.
+    SetSpan(usize, Span),
+    /// Delete the specified span. Counts from the bottom.
+    DeleteSpan(usize),
     /// Send to the terminal to make it send OutputMessage::Display with its contents
     ForceUpdate,
 }
@@ -51,6 +69,14 @@ pub enum TerminalMessage {
 pub enum OutputMessage {
     /// Display payload to the screen. Should be `terminal.to_string()` 99.99% of the time
     Display(String),
+    /// To be handled by the Session host, i.e. open something.
+    Signal,
+}
+
+#[derive(Debug)]
+pub enum ReturnValue {
+    User(Option<User>),
+    SignInResult(Result<(), SignInError>),
 }
 
 /// A message sent between the input and output threads of the `Session`.
@@ -61,6 +87,9 @@ pub enum SessionMessage {
     Output(OutputMessage, Option<Sender<SessionMessage>>),
     Interrupt,
     Resize(usize, usize),
+    Ack(Option<Sender<SessionMessage>>),
+    Return(ReturnValue),
+    KillSessionYesReallyTheActualSessionNotSomeInternalThing,
 }
 
 /// The highest-level container of a `Terminal` and `Shell`.
@@ -157,21 +186,23 @@ impl Session {
             match message_result {
                 Ok(m) => match m {
                     SessionMessage::Shell(_, _) => {
-                        self.input.send(m);
+                        self.input.send(m).unwrap();
                     }
                     SessionMessage::Terminal(_, _) => {
-                        self.output.send(m);
+                        self.output.send(m).unwrap();
                     }
                     SessionMessage::Output(_, _) => {
                         if let Some(output_handler) = &self.output_handler {
-                            output_handler.send(m);
+                            output_handler.send(m).unwrap();
                         }
                     }
                     SessionMessage::Resize(_, _) => todo!(),
                     SessionMessage::Interrupt => {
-                        self.input.send(SessionMessage::Interrupt);
-                        self.output.send(SessionMessage::Interrupt);
-                        println!("Session: Interrupt received!");
+                        self.input.send(SessionMessage::Interrupt).unwrap();
+                    }
+                    SessionMessage::Ack(..) => {}
+                    SessionMessage::Return(..) => {}
+                    SessionMessage::KillSessionYesReallyTheActualSessionNotSomeInternalThing => {
                         break;
                     }
                 },
