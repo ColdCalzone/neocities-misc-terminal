@@ -4,6 +4,8 @@ fn run() -> Box<dyn FnOnce(Vec<String>, Receiver<SessionMessage>, Sender<Session
         style::{Color, Span},
         ShellMessage, TerminalMessage,
     };
+    use std::sync::mpsc::TryRecvError;
+
     Box::new(move |args, receiver, sender| {
         let cash: [Span; 4] = [
             Span::new()
@@ -75,23 +77,28 @@ fn run() -> Box<dyn FnOnce(Vec<String>, Receiver<SessionMessage>, Sender<Session
             .unwrap();
 
         loop {
-            match receiver.recv() {
-                Ok(SessionMessage::Shell(ShellMessage::InputKeyEvent(k), _)) => {
-                    if let Key::Enter = k.key_type {
-                        sender
-                            .send(SessionMessage::Terminal(
-                                TerminalMessage::Push("\r\n".into()),
-                                None,
-                            ))
-                            .unwrap();
-                        break;
+            match receiver.try_recv() {
+                Ok(m) => {
+                    if let SessionMessage::Shell(ShellMessage::InputKeyEvent(k), _) = m {
+                        if let Key::Enter = k.key_type {
+                            sender
+                                .send(SessionMessage::Terminal(
+                                    TerminalMessage::Push("\r\n".into()),
+                                    None,
+                                ))
+                                .unwrap();
+                            break;
+                        }
                     }
                 }
-                Err(_) => {
+                Err(TryRecvError::Disconnected) => {
                     break;
                 }
                 _ => {}
             }
         }
+        sender
+            .send(SessionMessage::Shell(ShellMessage::ExitCode(0), None))
+            .unwrap();
     })
 }

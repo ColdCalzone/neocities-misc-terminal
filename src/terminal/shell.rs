@@ -92,6 +92,14 @@ impl Shell for DefaultShell {
                         running.sender.send(session_message).unwrap();
                     }
                 }
+                ShellMessage::ExitCode(..) => {
+                    if let Some(tx) = ret {
+                        tx.send(SessionMessage::Ack(None)).unwrap();
+                    }
+                    if let Some(running) = &self.running {
+                        running.sender.send(session_message).unwrap();
+                    }
+                }
                 ShellMessage::ChangeCwd(path) => {
                     *self.cwd.lock().unwrap() = path.clone();
 

@@ -34,6 +34,8 @@ pub trait EventLoop {
 pub enum ShellMessage {
     /// Sent to the shell to pass to the current running program
     InputKeyEvent(KeyEvent),
+    /// Sent to the shell to pass to the current running program
+    ExitCode(u32),
     /// Sent to the shell to instruct it to change the CWD
     ChangeCwd(PathBuf),
     /// Sent to the shell, asking it to return the current user

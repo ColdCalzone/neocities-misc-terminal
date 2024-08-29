@@ -6,6 +6,7 @@ fn run() -> Box<dyn FnOnce(Vec<String>, Receiver<SessionMessage>, Sender<Session
     use crate::session::{ReturnValue, ShellMessage, TerminalMessage};
     use crate::terminal::style::{Color, Span};
     use std::sync::mpsc::channel;
+    use std::sync::mpsc::TryRecvError;
     use std::thread::{self, JoinHandle};
 
     struct CashProcess {
@@ -226,6 +227,7 @@ fn run() -> Box<dyn FnOnce(Vec<String>, Receiver<SessionMessage>, Sender<Session
         data: &mut CashShellData,
     ) -> () {
         let args = args_parser(&data.input);
+        data.input = String::new();
         let Ok(mut args) = args else {
             shell_tx
                 .send(SessionMessage::Terminal(
@@ -236,8 +238,6 @@ fn run() -> Box<dyn FnOnce(Vec<String>, Receiver<SessionMessage>, Sender<Session
             *state = state_transition(shell_tx, *state, data, CashState::Input);
             return;
         };
-
-        data.input = String::new();
 
         if args.len() == 0 {
             *state = state_transition(shell_tx, *state, data, CashState::Input);
@@ -312,16 +312,25 @@ fn run() -> Box<dyn FnOnce(Vec<String>, Receiver<SessionMessage>, Sender<Session
         data: &mut CashShellData,
         events: &Receiver<SessionMessage>,
     ) -> () {
-        if let Some(running) = &data.running {
-            if let Ok(m) = events.try_recv() {
-                if let Err(_) = running.sender.send(m) {
+        match events.try_recv() {
+            Ok(m) => {
+                if let SessionMessage::Shell(ShellMessage::ExitCode(_), _) = m {
                     data.running = None;
                     *state = state_transition(&shell_tx, *state, data, CashState::Input);
+                    return;
+                }
+                if let Some(running) = &data.running {
+                    if let Err(_) = running.sender.send(m) {
+                        data.running = None;
+                        *state = state_transition(&shell_tx, *state, data, CashState::Input);
+                    }
                 }
             }
-        } else {
-            data.running = None;
-            *state = state_transition(&shell_tx, *state, data, CashState::Input);
+            Err(TryRecvError::Disconnected) => {
+                data.running = None;
+                *state = state_transition(&shell_tx, *state, data, CashState::Input);
+            }
+            _ => {}
         }
     }
 
@@ -349,5 +358,8 @@ fn run() -> Box<dyn FnOnce(Vec<String>, Receiver<SessionMessage>, Sender<Session
                 }
             }
         }
+        shell_tx
+            .send(SessionMessage::Shell(ShellMessage::ExitCode(0), None))
+            .unwrap();
     })
 }
