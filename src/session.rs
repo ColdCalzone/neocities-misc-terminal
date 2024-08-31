@@ -15,10 +15,12 @@ use std::{
     thread,
 };
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum EventLoopError {
     ChannelClosed,
 }
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum BudgetNever {}
 
 pub trait EventLoop {
@@ -31,6 +33,7 @@ pub trait EventLoop {
 
 /// Messages sent to the shell / running processes
 #[derive(Debug)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum ShellMessage {
     /// Sent to the shell to pass to the current running program
     InputKeyEvent(KeyEvent),
@@ -47,6 +50,7 @@ pub enum ShellMessage {
 
 /// Messages sent to the terminal
 #[derive(Debug)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum TerminalMessage {
     /// Sent to the terminal to add the line to the buffer
     PushLine(String),
@@ -68,14 +72,14 @@ pub enum TerminalMessage {
 
 /// Messages sent to the output handler
 #[derive(Debug)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum OutputMessage {
     /// Display payload to the screen. Should be `terminal.to_string()` 99.99% of the time
     Display(String),
-    /// To be handled by the Session host, i.e. open something.
-    Signal,
 }
 
 #[derive(Debug)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum ReturnValue {
     User(Option<User>),
     SignInResult(Result<(), SignInError>),
@@ -83,6 +87,7 @@ pub enum ReturnValue {
 
 /// A message sent between the input and output threads of the `Session`.
 #[derive(Debug)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum SessionMessage {
     Terminal(TerminalMessage, Option<Sender<SessionMessage>>),
     Shell(ShellMessage, Option<Sender<SessionMessage>>),
@@ -96,6 +101,7 @@ pub enum SessionMessage {
 
 /// The highest-level container of a `Terminal` and `Shell`.
 /// Largely responsible for async IO.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub struct Session {
     input: Sender<SessionMessage>,
     output: Sender<SessionMessage>,
@@ -106,6 +112,7 @@ pub struct Session {
 }
 
 impl Session {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
     pub fn get_session() -> Self {
         let mut term = DefaultTerminal::new();
         let mut shell = DefaultShell::new_in_home(User::from_name("guest"));
@@ -138,6 +145,7 @@ impl Session {
 
     /// *Pending a rename.* \
     /// Accepts a closure which takes `SessionMessage`s as an argument
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
     pub fn output_handler(&mut self, output_function: fn(String) -> ()) {
         let (tx, rx) = channel::<SessionMessage>();
         self.output_handler = Some(tx);
@@ -171,6 +179,7 @@ impl Session {
         });
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
     pub fn input_handler(&mut self, input_function: fn() -> Option<SessionMessage>) {
         let (tx, rx) = channel::<SessionMessage>();
         let sender = self.sender_self.clone();
@@ -182,6 +191,7 @@ impl Session {
         });
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
     pub fn run(self) {
         loop {
             let message_result = self.receiver.recv();

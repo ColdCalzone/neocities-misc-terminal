@@ -21,6 +21,10 @@ console_error_panic_hook = { version = "0.1.7", optional = true }
 macro_hash = { path = "macro_hash/" }
 tree = { path = "tree/" }
 
+[dependencies.web-sys]
+features = ['Window', 'Location']
+version = "0.3.70"
+
 [build-dependencies]
 tree = { path = "tree/" }
 
