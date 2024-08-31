@@ -18,12 +18,10 @@ use std::{
     thread,
 };
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum EventLoopError {
     ChannelClosed,
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum BudgetNever {}
 
 pub trait EventLoop {
@@ -36,7 +34,6 @@ pub trait EventLoop {
 
 /// Messages sent to the shell / running processes
 #[derive(Debug)]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum ShellMessage {
     /// Sent to the shell to pass to the current running program
     InputKeyEvent(KeyEvent),
@@ -53,7 +50,6 @@ pub enum ShellMessage {
 
 /// Messages sent to the terminal
 #[derive(Debug)]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum TerminalMessage {
     /// Sent to the terminal to add the line to the buffer
     PushLine(String),
@@ -75,14 +71,12 @@ pub enum TerminalMessage {
 
 /// Messages sent to the output handler
 #[derive(Debug)]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum OutputMessage {
     /// Display payload to the screen. Should be `terminal.to_string()` 99.99% of the time
     Display(String),
 }
 
 #[derive(Debug)]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum ReturnValue {
     User(Option<User>),
     SignInResult(Result<(), SignInError>),
@@ -90,7 +84,6 @@ pub enum ReturnValue {
 
 /// A message sent between the input and output threads of the `Session`.
 #[derive(Debug)]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub enum SessionMessage {
     Terminal(TerminalMessage, Option<Sender<SessionMessage>>),
     Shell(ShellMessage, Option<Sender<SessionMessage>>),
