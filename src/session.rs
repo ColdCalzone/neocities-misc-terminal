@@ -175,7 +175,7 @@ impl Session {
         });
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+    // #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
     pub fn input_handler(&mut self, input_function: fn() -> Option<SessionMessage>) {
         let (tx, rx) = channel::<SessionMessage>();
         let sender = self.sender_self.clone();

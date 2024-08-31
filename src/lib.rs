@@ -19,12 +19,10 @@ pub fn get_session() -> Session {
     session::Session::get_session()
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub fn create_input_event(key_event: key_events::KeyEvent) -> SessionMessage {
     SessionMessage::Shell(ShellMessage::InputKeyEvent(key_event), None)
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub fn create_interrupt() -> SessionMessage {
     SessionMessage::Interrupt
 }
